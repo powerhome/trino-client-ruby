@@ -84,6 +84,7 @@ module ActiveRecord
 
         @trino_client = self.class.new_client(@connection_parameters)
         @visitor = Arel::Visitors::ToSql.new(self)
+        @statements = {}
       end
 
       # Returns the human-readable name of the adapter
@@ -201,7 +202,11 @@ module ActiveRecord
 
           # Convert to ActiveRecord::Result
           column_names = columns.map(&:name)
-          column_types = columns.map { |col| type_map.lookup(col.type) }
+          # Build simple column types - ActiveRecord will handle conversion
+          column_types = {}
+          column_names.each_with_index do |col_name, i|
+            column_types[col_name] = lookup_cast_type(columns[i].type)
+          end
 
           ActiveRecord::Result.new(column_names, rows, column_types)
         end
@@ -217,15 +222,7 @@ module ActiveRecord
       def select_all(arel, name = nil, binds = [], preparable: nil)
         arel = arel_from_relation(arel)
         sql = to_sql(arel, binds)
-
-        if prepared_statements
-          cache = @statements[sql_key(sql)]
-          unless cache
-            cache = @statements[sql_key(sql)] = {stmt: sql}
-          end
-        end
-
-        exec_query(sql, name, binds, prepare: prepared_statements)
+        exec_query(sql, name, binds, prepare: false)
       end
 
       def select_value(arel, name = nil, binds = [])
@@ -382,6 +379,22 @@ module ActiveRecord
 
       private
 
+      def to_sql(arel, binds = [])
+        if arel.respond_to?(:ast)
+          @visitor.accept(arel.ast) do
+            quote_bound_value(binds.shift)
+          end
+        elsif arel.is_a?(String)
+          arel
+        else
+          arel.to_sql
+        end
+      end
+
+      def quote_bound_value(value)
+        quote(value)
+      end
+
       def sql_type_metadata(sql_type)
         SqlTypeMetadata.new(
           sql_type: sql_type,
@@ -424,10 +437,6 @@ module ActiveRecord
         else
           relation.arel
         end
-      end
-
-      def sql_key(sql)
-        "#{schema_cache.connection_pool.schema_reflection.database_version.to_s}-#{sql}"
       end
     end
 
