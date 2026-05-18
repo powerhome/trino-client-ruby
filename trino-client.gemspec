@@ -26,6 +26,10 @@ Gem::Specification.new do |gem|
     gem.add_dependency("base64")
   end
 
+  # Optional: ActiveRecord support
+  # Users can install activerecord separately and require 'activerecord-trino-adapter'
+  # gem.add_dependency "activerecord", ">= 6.0"
+
   gem.add_development_dependency "rake", [">= 0.9.2", "< 14.0"]
   gem.add_development_dependency "rspec", "~> 3.13.0"
   gem.add_development_dependency "webmock", ["~> 3.0"]
@@ -33,4 +37,5 @@ Gem::Specification.new do |gem|
   gem.add_development_dependency "simplecov", "~> 0.22.0"
   gem.add_development_dependency "standard", "~> 1.54.0"
   gem.add_development_dependency "psych", "~> 3"
+  gem.add_development_dependency "activerecord", ">= 6.0"
 end

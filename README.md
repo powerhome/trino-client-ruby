@@ -80,6 +80,175 @@ client.query("select * from sys.node") do |q|
 end
 ```
 
+## ActiveRecord Adapter (Optional)
+
+This library includes an optional ActiveRecord adapter for using Trino as a data source with ActiveRecord. This allows you to use familiar ActiveRecord query interfaces to interact with Trino tables.
+
+### Installation
+
+To use the ActiveRecord adapter, you need to install ActiveRecord separately:
+
+```ruby
+# In your Gemfile
+gem 'trino-client'
+gem 'activerecord', '>= 6.0'
+```
+
+Then require the adapter in your code:
+
+```ruby
+require 'activerecord-trino-adapter'
+```
+
+### Configuration
+
+You can configure the Trino connection in your `database.yml`:
+
+```yaml
+# config/database.yml
+development:
+  adapter: trino
+  host: localhost
+  port: 8080
+  catalog: hive
+  schema: default
+  username: trino_user
+  # Optional settings:
+  # password: secret
+  # ssl: false
+  # time_zone: UTC
+  # http_proxy: proxy.example.com:8080
+  # properties:
+  #   hive.force_local_scheduling: true
+```
+
+Or establish a connection programmatically:
+
+```ruby
+ActiveRecord::Base.establish_connection(
+  adapter: 'trino',
+  host: 'localhost',
+  port: 8080,
+  catalog: 'hive',
+  schema: 'default',
+  username: 'trino_user'
+)
+```
+
+### Usage Examples
+
+#### Basic Queries
+
+```ruby
+# Execute raw SQL
+result = ActiveRecord::Base.connection.execute("SELECT * FROM my_table LIMIT 10")
+result.rows.each do |row|
+  puts row.inspect
+end
+
+# Using exec_query for structured results
+result = ActiveRecord::Base.connection.exec_query("SELECT name, age FROM users")
+result.columns # => ["name", "age"]
+result.rows    # => [["Alice", 30], ["Bob", 25]]
+```
+
+#### Defining Models
+
+```ruby
+class User < ActiveRecord::Base
+  self.table_name = 'users'
+
+  # Note: Trino doesn't support primary keys, so you may need to handle IDs differently
+  self.primary_key = nil
+end
+
+# Query with ActiveRecord methods
+User.where("age > 25").limit(10).each do |user|
+  puts "#{user.name} is #{user.age} years old"
+end
+
+# Select specific columns
+User.select(:name, :email).where("created_at > DATE '2024-01-01'")
+```
+
+#### Schema Inspection
+
+```ruby
+connection = ActiveRecord::Base.connection
+
+# List all tables
+connection.tables
+# => ["users", "orders", "products"]
+
+# Get columns for a table
+connection.columns('users')
+# => [#<ActiveRecord::ConnectionAdapters::TrinoColumn...>]
+
+# Check if table exists
+connection.table_exists?('users')
+# => true
+```
+
+#### Working with Different Catalogs and Schemas
+
+```ruby
+# Query from a different catalog/schema
+result = ActiveRecord::Base.connection.execute(
+  "SELECT * FROM other_catalog.other_schema.table_name"
+)
+
+# Or establish a new connection for a different catalog
+ActiveRecord::Base.establish_connection(
+  adapter: 'trino',
+  host: 'localhost',
+  port: 8080,
+  catalog: 'memory',  # Different catalog
+  schema: 'analytics',
+  username: 'analyst'
+)
+```
+
+### Important Limitations
+
+Since Trino is primarily designed for analytical queries, the ActiveRecord adapter has some limitations:
+
+- **Read-only**: Write operations (INSERT, UPDATE, DELETE) may not work with all catalogs
+- **No Transactions**: Trino doesn't support traditional transactions
+- **No Primary Keys**: Trino doesn't enforce primary key constraints
+- **No Migrations**: Schema migrations are not supported
+- **No Indexes**: Traditional database indexes don't exist in Trino
+- **Limited DDL**: CREATE/DROP table support depends on the catalog/connector
+
+### Supported Features
+
+- ✅ SELECT queries with WHERE, ORDER BY, LIMIT, etc.
+- ✅ JOINs (INNER, LEFT, RIGHT, FULL)
+- ✅ Aggregations (COUNT, SUM, AVG, etc.)
+- ✅ Common Table Expressions (CTEs)
+- ✅ Subqueries
+- ✅ Schema inspection (tables, columns)
+- ✅ Views and materialized views
+- ✅ Type mapping for common SQL types
+- ✅ Query explain
+
+### Type Mapping
+
+The adapter maps Trino types to Ruby/ActiveRecord types:
+
+| Trino Type | Ruby Type | ActiveRecord Type |
+|------------|-----------|-------------------|
+| `varchar`, `char` | String | :string |
+| `integer`, `int` | Integer | :integer |
+| `bigint` | Integer | :bigint |
+| `double`, `real` | Float | :float |
+| `decimal` | BigDecimal | :decimal |
+| `boolean` | Boolean | :boolean |
+| `date` | Date | :date |
+| `time` | Time | :time |
+| `timestamp` | Time | :datetime |
+| `varbinary` | String | :binary |
+| `json` | String (parsed) | :json |
+
 ## Build models
 
 ```

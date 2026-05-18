@@ -72,3 +72,66 @@ Tests are organized by component:
 - `spec/statement_client_spec.rb` - Low-level protocol tests
 - `spec/column_value_parser_spec.rb` - Data parsing tests
 - `spec/tpch_query_spec.rb` - Integration tests with TPC-H queries
+- `spec/activerecord_adapter_spec.rb` - ActiveRecord adapter tests (requires running Trino server)
+
+## ActiveRecord Adapter
+
+The library includes an optional ActiveRecord adapter in `lib/active_record/connection_adapters/trino_adapter.rb`.
+
+### Architecture
+
+The adapter extends `ActiveRecord::ConnectionAdapters::AbstractAdapter` and provides:
+
+1. **Connection Management**:
+   - Uses the existing `Trino::Client` for all communication
+   - Connection parameters are mapped from ActiveRecord config to Trino client options
+   - Supports reconnection and connection health checks
+
+2. **Query Execution**:
+   - `execute()` - Runs raw SQL and returns a TrinoResult
+   - `exec_query()` - Returns ActiveRecord::Result with typed columns
+   - `select_all()`, `select_value()`, `select_rows()` - Standard ActiveRecord query methods
+
+3. **Schema Introspection**:
+   - `tables()` - Lists tables using SHOW TABLES
+   - `columns()` - Gets column definitions using DESCRIBE
+   - `views()`, `view_exists?()` - View support via information_schema
+   - Type mapping from Trino SQL types to ActiveRecord types
+
+4. **Quoting and Type Mapping**:
+   - Custom quoting for Trino SQL syntax (e.g., DATE '2024-01-01')
+   - Type mapping between Trino types (varchar, bigint, double, etc.) and Ruby types
+   - Proper escaping of identifiers and values
+
+### Usage
+
+To use the adapter:
+
+```ruby
+require 'activerecord-trino-adapter'
+
+ActiveRecord::Base.establish_connection(
+  adapter: 'trino',
+  host: 'localhost',
+  port: 8080,
+  catalog: 'hive',
+  schema: 'default',
+  username: 'user'
+)
+```
+
+### Limitations
+
+- Read-only for most catalogs (Trino is primarily analytical)
+- No transaction support
+- No migration support
+- No primary key enforcement
+- No traditional indexes
+
+### Testing the Adapter
+
+Set `TRINO_SERVER` environment variable and run:
+```bash
+TRINO_SERVER=localhost:8080 bundle exec rspec spec/activerecord_adapter_spec.rb
+```
+
